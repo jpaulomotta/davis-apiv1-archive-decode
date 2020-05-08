@@ -19,7 +19,30 @@ Davis::Codec.decode_data(bytes, "-0300 -03")
 ```
 
 ## Parsed parameters
-This version of the codec is only parsing the temperature, rain fall amount in milimiters and rain rate in milimiters per hour. To parse more parameters you will need to look at the conversion table on page 32 of the manual.
 
-
+- davis_timestamp
+- high_temperature_c
+- low_temperature_c
+- temperature_c
+- rain_amount_mm
+- rain_rate_mm_per_hour
+- barometer
+- solar_radiation
+- humidity
+- average_wind_speed
+- high_wind_speed
+- high_wind_direction
+- wind_direction
+- average_uv
+- et
+- high_solar_radiation
+- high_uv_index
+- leaf_temperatures_raw
+- leaf_wetnesses_raw
+- soil_temperatures_raw
+- extra_humidities_raw
+- extra_temperature_0_raw
+- extra_temperature_1_raw
+- extra_temperature_2_raw
+- soil_moistures_raw
 

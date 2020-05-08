@@ -11,6 +11,11 @@
 # @author João Paulo Motta Oliveira Silva
 #
 class Davis::Codec
+
+  DASH_BYTE = 255 #0xFF
+  DASH_SHORT = 32767 #0x7FFF
+  DASH_SIGNED_SHORT = -32768
+
   #Example: 416351713 is 06/17/2012 15:05
   def self.encode_date(year, month, day)
     (day + month*32 + (year-2000)*512)
@@ -20,6 +25,16 @@ class Davis::Codec
     (100*hour + minute)
   end
 
+
+  def self.in_to_mm(v)
+    return nil if v.nil? || (v.respond_to?(:strip) && v.strip == '')
+    v.to_f * 25.4
+  end
+
+  def self.mph_to_kmh(v)
+    return nil if v.nil? || (v.respond_to?(:strip) && v.strip == '')
+    (v.to_f * 1.60934).round(1)
+  end
 
   # Pack date and time bits in the format expected to query davis archive.
   # The API expects timestamps to be encoded in the format below:
@@ -62,18 +77,8 @@ class Davis::Codec
     hour = time/100
     minute = time - (hour*100)
     second = 0
-    
     puts "#{year}-#{month}-#{day} #{hour}:#{minute}" if ENV["DEBUG"]
     Time.new(year, month, day, hour, minute, second, utc_offset)
-  end
-
-  def self.decode_temperature(temp)
-    ((temp/10.0) - 32) * (5/9.0)
-  end
-
-  # 1 rain click equals 0.2 mm of rain
-  def self.decode_rain(rain)
-    rain * 0.2
   end
 
   # Parses Davis weather station data to ruby hash
@@ -100,6 +105,49 @@ class Davis::Codec
   end
 
 
+  def self.decode_temperature(temp)
+    return nil if temp == DASH_SHORT || temp == DASH_SIGNED_SHORT
+    ((temp/10.0) - 32) * (5/9.0)
+  end
+
+  # 1 rain click equals 0.2 mm of rain
+  def self.decode_rain(rain)
+    rain * 0.2
+  end
+
+  CARDINALS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 
+    'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+
+  def self.decode_wind_direction(v)
+    return nil if v == DASH_BYTE
+    CARDINALS[v]
+  end
+
+  def self.decode_et(v)
+    return nil if v == 0
+    in_to_mm(v/1000.0)
+  end
+
+  def self.decode_uv(v)
+    return nil if v == DASH_BYTE
+    v/10.0
+  end
+
+  def self.decode_solar_radiation(v)
+    return nil if v == DASH_SHORT
+    v
+  end
+
+  def self.decode_humidity(v)
+    return nil if v == DASH_BYTE
+    v
+  end
+
+  def self.decode_wind_speed(v)
+    return nil if v == DASH_BYTE
+    mph_to_kmh(v)
+  end
+
   def self.is_dash(archive)
     archive.unpack('SS') == [0xFFFF, 0xFFFF]
   end
@@ -116,13 +164,41 @@ class Davis::Codec
       puts "DASHVALUE" if ENV["DEBUG"]
       return nil
     end
-    bin_data = archive.unpack('SSSSSSS')
+
+    bin_data = archive.unpack('SSsssSSSSSSCCCCCCCCSCCSSLCSCCCL')
+
+    #begin 
+    valid_date_time = decode_timestamp(date: bin_data[0], time: bin_data[1], utc_offset: utc_offset)
+    # rescue ...
+    # end 
+    
     {
       davis_timestamp: pack_datetime(date: bin_data[0], time: bin_data[1]),
-      valid_date_time: decode_timestamp(date: bin_data[0], time: bin_data[1], utc_offset: utc_offset),
-      temperature_c: decode_temperature(bin_data[2]),
+      valid_date_time: valid_date_time,
+      high_temperature_c: decode_temperature(bin_data[2]),
+      low_temperature_c: decode_temperature(bin_data[3]),
+      temperature_c: decode_temperature(bin_data[4]),
       rain_amount_mm: decode_rain(bin_data[5]),
       rain_rate_mm_per_hour: decode_rain(bin_data[6]),
+      barometer: bin_data[7] / 1000.0,
+      solar_radiation: decode_solar_radiation(bin_data[8]),
+      humidity: decode_humidity(bin_data[12]),
+      average_wind_speed: decode_wind_speed(bin_data[13]),
+      high_wind_speed: decode_wind_speed(bin_data[14]),
+      high_wind_direction: decode_wind_direction(bin_data[15]),
+      wind_direction: decode_wind_direction(bin_data[16]),
+      average_uv: decode_uv(bin_data[17]),
+      et: decode_et(bin_data[18]),
+      high_solar_radiation: decode_solar_radiation(bin_data[19]),
+      high_uv_index: decode_uv(bin_data[20]),
+      leaf_temperatures_raw: bin_data[22],
+      leaf_wetnesses_raw: bin_data[23],
+      soil_temperatures_raw: bin_data[24],
+      extra_humidities_raw: bin_data[26],
+      extra_temperature_0_raw: bin_data[27],
+      extra_temperature_1_raw: bin_data[28],
+      extra_temperature_2_raw: bin_data[29],
+      soil_moistures_raw: bin_data[30],
     }
   end
   # receives a utc_offset in Davis format
